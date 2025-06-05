@@ -17,7 +17,6 @@ export const saveQuestion = async (question: SavedQuestion) => {
     solution_image: question.solutionImage,
     test_name_id: question.testNameId,
     question_subject_id: question.questionSubjectId,
-    question_difficulty: question.questionDifficulty,
   };
 
   const { data, error } = await supabase

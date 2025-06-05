@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
-import { type Question, type ImageFile, type DropdownOption } from "../types";
-import { questionDifficulties } from "../data/dropdownOptions";
+import { type Question, type DropdownOption } from "../types";
 import {
   saveQuestion,
   getTestNames,
@@ -9,13 +8,25 @@ import {
   uploadImage,
 } from "../lib/supabase";
 import { convertImageToHtml } from "../services/openAiApi";
+import type { SelectedImage } from "../App";
 
 interface QuestionFormProps {
-  selectedImage: ImageFile | null;
+  selectedImage?: SelectedImage;
+  setSavedImage: React.Dispatch<React.SetStateAction<Set<string>>>;
+}
+
+declare global {
+  interface Window {
+    MathJax: {
+      typesetClear: () => void;
+      typeset: () => void;
+    };
+  }
 }
 
 const QuestionForm: React.FC<QuestionFormProps> = ({
   selectedImage,
+  setSavedImage,
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,7 +49,19 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
   const questionValue = watch("question");
   const options = watch("options");
 
-  console.log(selectedAnswer);
+  useEffect(() => {
+    if (typeof window?.MathJax !== "undefined") {
+      window.MathJax.typesetClear();
+      window.MathJax.typeset();
+    }
+  }, [questionValue]);
+
+  useEffect(() => {
+    if (selectedImage?.conversionOutput) {
+      setValue("question", selectedImage.conversionOutput.question);
+      setValue("options", selectedImage.conversionOutput.options.join("\n"));
+    }
+  }, [selectedImage?.conversionOutput, setValue]);
 
   // Fetch dropdown options from Supabase on component mount
   useEffect(() => {
@@ -80,7 +103,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
 
     setIsGenerating(true);
     try {
-      const response = await convertImageToHtml(selectedImage.file);
+      const response = await convertImageToHtml(selectedImage.image.file);
       setValue("question", response.question);
       setValue("options", response.options.join("\n"));
     } catch (e) {
@@ -106,7 +129,10 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
     try {
       // First, upload the image to Supabase Storage
       setIsUploadingImage(true);
-      const imageUrl = await uploadImage(selectedImage.file, "question-images");
+      const imageUrl = await uploadImage(
+        selectedImage.image.file,
+        "question-images",
+      );
       setIsUploadingImage(false);
 
       // Then save the question with the image URL
@@ -120,6 +146,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         image: imageUrl,
         createdAt: new Date().toISOString(),
       });
+      setSavedImage((prev) => new Set(prev.add(selectedImage.image.name)));
     } catch (error) {
       setIsUploadingImage(false);
       if (error instanceof Error && error.message.includes("Upload failed")) {
@@ -243,7 +270,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
               required: "Options are required",
               validate: (value) => {
                 return (
-                  (value.split("\n").length >= 2) ||
+                  value.split("\n").length >= 2 ||
                   "At least 2 options are required"
                 );
               },
@@ -265,13 +292,13 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
             Answer
           </label>
           <select
-            onChange={(e) => setSelectedAnswer(parseInt(e.target.value) ?? undefined)}
+            onChange={(e) =>
+              setSelectedAnswer(parseInt(e.target.value) ?? undefined)
+            }
             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
             disabled={isLoadingOptions}
           >
-            <option value={undefined}>
-              Select answer
-            </option>
+            <option value={undefined}>Select answer</option>
             {options?.split("\n").map((option, i) => (
               <option key={i} value={i}>
                 {option}
@@ -294,7 +321,7 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
         </div>
 
         {/* Dropdown Fields */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Test Name
@@ -345,30 +372,6 @@ const QuestionForm: React.FC<QuestionFormProps> = ({
             {errors.questionSubjectId && (
               <p className="mt-1 text-sm text-red-600">
                 {errors.questionSubjectId.message}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Question Difficulty
-            </label>
-            <select
-              {...register("questionDifficulty", {
-                required: "Question difficulty is required",
-              })}
-              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Select difficulty</option>
-              {questionDifficulties.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            {errors.questionDifficulty && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.questionDifficulty.message}
               </p>
             )}
           </div>

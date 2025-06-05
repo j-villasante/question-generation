@@ -6,7 +6,6 @@ export interface Question {
   solutionImage?: string;
   testNameId: string;
   questionSubjectId: string;
-  questionDifficulty: string;
   createdAt?: string;
 }
 
